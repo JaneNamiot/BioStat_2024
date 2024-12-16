@@ -1,0 +1,300 @@
+---
+title: "HW2"
+output: html_document
+date: "2024-09-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r first_task}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggpubr) 
+library(forcats)
+
+# Чтение данных
+file_path <- "C:/Users/enami/Downloads/hogwarts_2024 (1).csv"
+data <- read.csv(file_path)
+
+# Преобразование переменных в факторы и замена значений на русский
+data <- data %>%
+  mutate(house = recode(house,
+                        "Gryffindor" = "Гриффиндор",
+                        "Hufflepuff" = "Пуффендуй",
+                        "Ravenclaw" = "Когтевран",
+                        "Slytherin" = "Слизерин")) %>%
+  mutate(house = as.factor(house),
+         bloodStatus = as.factor(bloodStatus))
+
+# Задание 1: Скаттерплот между суммарным баллом и оценкой по травологии
+ggplot(data, aes(x = `Herbology.exam`, y = result, color = house)) +
+  geom_point(size = 3) + # Увеличиваем размер точек
+  geom_smooth(aes(group = house), method = "lm", se = FALSE) + # Явная группировка по house
+  theme_minimal() + # Используем минималистичную тему
+  labs(title = "Связь между суммарным баллом и оценкой по травологии",
+       x = "Оценка по травологии",
+       y = "Суммарный балл") +
+  scale_color_manual(values = c("Гриффиндор" = "#9B0000", 
+                                "Пуффендуй" = "#FFD100", 
+                                "Когтевран" = "#003DA5", 
+                                "Слизерин" = "#2D3E18")) + # Цвета факультетов
+  theme(text = element_text(size = 14))
+#Самые низкие баллы и оценки по травологии присутствуют только у слизерина
+# Задание 2: Скаттерплоты для нескольких экзаменов с аннотациями
+data_long <- data %>%
+  pivot_longer(cols = c(`Herbology.exam`, `Muggle.studies.exam`, `Divinations.exam`, `Potions.exam`),
+               names_to = "subject", values_to = "score")
+
+ggplot(data_long, aes(x = score, y = result, color = house)) +
+  geom_point(size = 3) +
+  geom_smooth(aes(group=house), method="lm", se=FALSE) + # Явная группировка по house
+  facet_wrap(~ subject) + # Создаем отдельные графики для каждого предмета
+  theme_minimal() +
+  labs(title="Связь между суммарным баллом и оценками по предметам",
+       x="Оценка",
+       y="Суммарный балл") +
+  scale_color_manual(values=c("Гриффиндор"="#9B0000", 
+                              "Пуффендуй"="#FFD100", 
+                              "Когтевран"="#003DA5", 
+                              "Слизерин"="#2D3E18")) + # Цвета факультетов
+  theme(text=element_text(size=14))
+#Только по зельеварение Слизерин явно выбивается среди других факультетов с самыми высокими оценками, в то время как в остальных предметах Слизерин занимают нишу с самыми низкими оценками. Слизерин делится на две группы - очень плохо учатся и очень хорошо. По зельеварению нет плохо учащихся Слизеринцев.
+# Задание 3: Видоизменение графика с группировкой линий тренда
+ggplot(data_long, aes(x=score, y=result, color=house)) +
+  geom_point(size=3) +
+  geom_smooth(aes(group=bloodStatus), method="lm", se=FALSE) + # Явная группировка по bloodStatus
+  facet_wrap(~ subject) +
+  theme_minimal() +
+  labs(title="Связь между суммарным баллом и оценками с линиями тренда",
+       x="Оценка",
+       y="Суммарный балл") +
+  scale_color_manual(values=c("Гриффиндор"="#9B0000", 
+                              "Пуффендуй"="#FFD100", 
+                              "Когтевран"="#003DA5", 
+                              "Слизерин"="#2D3E18")) + # Цвета факультетов
+  theme(text=element_text(size=14))
+#По последнему экзамену (зельеварение) тренд сворачивается за счет Слизерина который очень хорошо сдает этот экзамен, при этом плохо сдавая остальные
+```
+```{r task 2}
+library(dplyr)
+library(tidyr)
+
+# Преобразование данных из широкого формата в длинный
+data_long <- data %>%
+  select(bloodStatus, sex, week_1:week_17) %>%  # Выбор только нужных колонок
+  pivot_longer(cols = week_1:week_17, 
+               names_to = "week", 
+               values_to = "scores")
+
+# Проверка преобразованных данных
+head(data_long)
+
+
+# Группировка данных по bloodStatus и суммирование баллов
+scores_by_origin <- data_long %>%
+  group_by(bloodStatus) %>%
+  summarise(total_scores = sum(scores, na.rm = TRUE), 
+            student_count = n()) %>%
+  arrange(desc(total_scores))
+
+# Проверка результатов
+print(scores_by_origin)
+
+library(ggplot2)
+
+# Построение барплота
+ggplot(scores_by_origin, aes(x = reorder(bloodStatus, -total_scores), y = total_scores)) +
+  geom_col(fill = "steelblue") +
+  geom_label(aes(label = student_count), 
+             position = position_stack(vjust = 0.5), 
+             size = 5, 
+             fill = "white", 
+             color = "black") + # Настройка внешнего вида geom_label
+  labs(title = "Распределение набранных баллов за первый семестр по происхождению",
+       x = "Происхождение",
+       y = "Сумма набранных баллов") +
+  theme_minimal()
+#Полукровки набирают больший баллов, чем все остальные
+# Группировка данных по bloodStatus и gender с суммированием баллов
+scores_by_origin_gender <- data_long %>%
+  group_by(bloodStatus, sex) %>%
+  summarise(total_scores = sum(scores, na.rm = TRUE), 
+            student_count = n()) %>%
+  arrange(desc(total_scores))
+#Баллы на студента полукрови 1,340; чистая кровь 1.795; грязная кровь 1,739. Если просто на #график смотреть, то полукровки набирают самое большое количество баллов, но если #учитываять количество студентов, nто чистая кровь набирает больше
+# Построение графика с разбивкой по полу
+ggplot(scores_by_origin_gender, aes(x = reorder(bloodStatus, -total_scores), y = total_scores, fill = sex)) +
+  geom_col(position="dodge") + # Разделяем столбцы по полу
+  geom_label(aes(label=student_count), 
+             position=position_dodge(width=0.9), 
+             vjust=-0.5) + # Размещаем метки справа от столбцов
+  labs(title="Распределение набранных баллов за первый семестр по происхождению и полу",
+       x="Происхождение",
+       y="Сумма набранных баллов") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=45,hjust=1)) # Читаемость меток на оси X
+output_path <- "C:/Users/enami/Downloads/score_distribution.png"
+
+ggsave(
+  filename = output_path,
+  plot = last_plot(), # Используем последний построенный график
+  width = 10,        # Ширина в дюймах
+  height = 6,        # Высота в дюймах
+  dpi = 300          # Разрешение
+)
+#функция coord_ip делает данные изометрическими, нужна для создания соразмеримых маштабов, #облегчает интепретацию визуальную. В больших данных могут возникнуть проблемы с #отображением, если диапазон по одной оси намного больше, чем по другой. График может стать #неудобным для восприятия. Данные могут иметь разные размерности
+```
+```{r task3}
+# Установка и загрузка необходимых библиотек
+library(ggplot2)
+library(patchwork)
+
+# Пример данных (замените этот фрейм данными вашего исследования)
+set.seed(123) # Для воспроизводимости
+data <- data.frame(
+  Potions.exam = sample(60:100, 100, replace = TRUE),
+  Study.of.ancient.runes.exam = sample(60:100, 100, replace = TRUE)
+)
+
+# Гистограмма
+histogram_plot <- ggplot(data, aes(x = Potions.exam)) + 
+  geom_histogram(binwidth = 5, fill = "blue", alpha = 0.7) + 
+  labs(title = "Распределение баллов по зельеварению", 
+       x = "Баллы по зельеварению", y = "Частота")
+
+# Ящик с усами
+boxplot_plot <- ggplot(data, aes(x = factor(0), y = Potions.exam)) + 
+  geom_boxplot(fill = "lightblue") + 
+  labs(title = "Ящик с усами: Зельеварение", 
+       x = "", y = "Баллы по зельеварению")
+
+# Плотность
+density_plot <- ggplot(data, aes(x = Study.of.ancient.runes.exam)) + 
+  geom_density(fill = "red", alpha = 0.5) + 
+  labs(title = "Плотность баллов по древним рунам", 
+       x = "Баллы по древним рунам", y = "Плотность")
+
+# Объединение графиков с использованием patchwork
+combined_plot <- (histogram_plot | boxplot_plot) / density_plot
+
+# Отображение объединенного графика
+print(combined_plot)
+#########
+# Пример данных
+set.seed(123)
+data_with_origin <- data.frame(
+  Potions.exam = sample(60:100, 300, replace = TRUE),
+  Origin = sample(c("Маглорожденные", "Чистокровные", "Полукровки"), 300, replace = TRUE)
+)
+
+# График средних баллов
+mean_scores_plot <- ggplot(data_with_origin, aes(x = fct_relevel(Origin, "Маглорожденные", "Чистокровные", "Полукровки"), 
+                                                 y = Potions.exam, fill = Origin)) +
+  stat_summary(fun = "mean", geom = "col") +
+  labs(title = "Средний балл по зельеварению в зависимости от происхождения",
+       x = "Происхождение", y = "Средний балл") +
+  theme_minimal()
+
+# График плотностей
+density_plot_origin <- ggplot(data_with_origin, aes(x = Potions.exam, fill = Origin)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Плотность распределения баллов по происхождению",
+       x = "Баллы по зельеварению", y = "Плотность") +
+  theme_minimal()
+
+# Объединение графиков с ggarrange
+combined_origin_plot <- ggarrange(
+  mean_scores_plot, 
+  density_plot_origin, 
+  labels = c("A", "B"), 
+  ncol = 2, 
+  nrow = 1, 
+  widths = c(1, 1),       # Равные размеры столбцов
+  heights = c(1, 1)       # Равные размеры строк
+) + theme(plot.title = element_text(size = 10), # Уменьшаем заголовки
+          axis.text = element_text(size = 8))   # Уменьшаем текст на осях
+
+print(combined_origin_plot)
+#все равно наезжают надписи пожалуйста посоветуйте как это исправить?
+
+#####воспроизведение
+file_path <- "C:/Users/enami/Downloads/hogwarts_2024 (1).csv"
+data <- read.csv(file_path)
+
+# Преобразование переменных в факторы и замена значений на русский
+data <- data %>%
+  mutate(
+    house = recode(house,
+                   "Gryffindor" = "Гриффиндор",
+                   "Hufflepuff" = "Пуффендуй",
+                   "Ravenclaw" = "Когтевран",
+                   "Slytherin" = "Слизерин"),
+    Пол = recode(sex, "Женский" = "Девочки", "Мужской" = "Мальчики"),
+    house = as.factor(house),
+    bloodStatus = as.factor(bloodStatus)
+  )
+
+# Цвета для факультетов
+house_colors <- c(
+  "Гриффиндор" = "#C50000",
+  "Пуффендуй" = "#ECB939",
+  "Когтевран" = "#41A6D9",
+  "Слизерин" = "#1F5D25"
+)
+
+# Построение графика
+ggplot(data, aes(x = house, y = result, fill = house)) +
+  geom_violin(trim = TRUE, alpha = 0.8, color = "black", size = 0.5) +
+  geom_boxplot(width = 0.1, position = position_dodge(width = 0.9), 
+               outlier.shape = NA, color = "black", fill = "white") +
+  # Ромбы для средних значений
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 5, 
+               fill = "darkred", color = "black", stroke = 1.5) +
+  # Линия на 0
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  # Настройка цветов
+  scale_fill_manual(values = house_colors) +
+  scale_y_continuous(breaks = seq(-300, 250, by = 50), limits = c(-300, 250)) +
+  labs(
+    title = "Баллы студентов Хогвартса",
+    subtitle = "Распределение числа баллов у студентов различных факультетов Хогвартса в 2023-2024 учебном году",
+    x = NULL,
+    y = "Количество очков",
+    fill = "Факультет",
+    caption = "Источник: независимые наблюдения"
+  ) +
+  # Разделение по полу
+  facet_grid(~ Пол) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, size = 12, color = "#8B4513"),
+    strip.text = element_text(size = 14),
+    strip.background = element_rect(fill = "grey85", color = "grey70"),
+    axis.title.y = element_text(size = 14),
+    axis.text.y = element_text(size = 12),
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12, face = "italic"),
+    legend.box = "vertical",
+    legend.direction = "vertical",
+    plot.caption = element_text(size = 10)
+  )
+
+```
+
+### Ответы на вопросы
+
+Распределение связано с тем, что большинство волшебников является полукровками (то есть в родителях есть только один волшебник)
+
+Распределение по полу соотносится с тем, что мы видели в первом пункте.
