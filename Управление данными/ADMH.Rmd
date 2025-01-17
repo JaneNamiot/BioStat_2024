@@ -1,0 +1,104 @@
+---
+title: "Управление данными (статистическое программирование)"
+author: "Jane Namiot"
+date: "2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library (tidyverse)
+library (readxl)
+```
+
+Задание: Согласно спецификации собрать датасет с анамнезом субъектов ADMH на основе ADSL и домена MH. Обратите внимание на содержимое переменной MHTERM, не во всех строках оно несет наполнение, что с этим нужно сделать? 
+Спецификация содержит столбец Core со статусом переменной, наличие значений в Req-переменных критически важно для оценки. 
+Приложите ссылку на свой гитхаб, в котором будет сохранена вся файловая структура архива; в папке ADaM-like должен находиться сделанный ADMH. Не забудьте приложить скрипт - он поможет разобраться в причинах ошибок (если они случатся) и дать вам рекомендации. 
+
+
+Загрузка
+```{r}
+MH <- read_excel("C:/Users/enami/OneDrive/Рабочий стол/Управление данными/SDTM/MH_MEDICALHISTORY.xlsx")
+ADSL <- read_excel("C:/Users/enami/OneDrive/Рабочий стол/Управление данными/ADam-like/ADSL.xlsx")
+
+```
+Спецификация
+```{r}
+
+
+ADSL_MH <- ADSL %>% select (-STUDYID) %>%
+  left_join(MH, by = c("SUBJID" = "SUBJID"))
+
+
+ADS_MH_selected <- ADSL_MH %>% select(STUDYID, USUBJID, TRTP, TRTPN, SUBJID, MHSEQ, MHCAT, MHDECOD, MHBODSYS, MHSTDTC, MHENDTC, MHENRTPT, MHTERM, MHENRTPT)
+
+MH_moderate <- ADS_MH_selected %>%
+  mutate(
+    ASTDT = case_when(
+      str_detect(MHSTDTC, "^\\d{4}-\\d{2}$") ~ paste0(MHSTDTC, "-01"),
+      str_detect(MHSTDTC, "^\\d{4}$") ~ paste0(MHSTDTC, "-01-01"),
+      TRUE ~ MHSTDTC
+    ),
+    ASTDTF = case_when(
+      is.na(MHSTDTC) | str_detect(MHSTDTC, "^[^\\d]") ~ "Y",
+      str_detect(MHSTDTC, "^\\d{4}$") ~ "M",
+      str_detect(MHSTDTC, "^\\d{4}-\\d{2}$") ~ "D",
+      TRUE ~ NA_character_
+    ),
+    AENDT = case_when(
+      MHENRTPT == "ONGOING" ~ "",
+      str_detect(MHENDTC, "^\\d{4}-\\d{2}$") ~ paste0(MHENDTC, "-01"),
+      str_detect(MHENDTC, "^\\d{4}$") ~ paste0(MHENDTC, "-01-01"),
+      TRUE ~ MHENDTC
+    ),
+    AENDTF = case_when(
+      is.na(MHENDTC) | str_detect(MHENDTC, "^[^\\d]") ~ "Y",
+      str_detect(MHENDTC, "^\\d{4}$") ~ "M",
+      str_detect(MHENDTC, "^\\d{4}-\\d{2}$") ~ "D",
+      TRUE ~ NA_character_
+    ),
+    MHENRF = if_else(MHENRTPT == "ONGOING", "ONGOING", "")
+  )
+```
+
+Фильтрация и форматирование ADMH
+
+```{r}
+
+ADMH <- MH_moderate %>%
+  dplyr::select(
+    STUDYID,
+    USUBJID,
+    TRTP,
+    TRTPN,
+    MHSEQ,
+    MHCAT,
+    MHTERM,
+    MHDECOD,
+    MHBODSYS,
+    MHSTDTC,
+    ASTDT,
+    ASTDTF,
+    MHENDTC,
+    AENDT,
+    AENDTF,
+    MHENRTPT,
+    MHENRF
+  ) %>%
+  dplyr::mutate(
+    MHSEQ = as.numeric(MHSEQ),
+    MHENDTC = as.character(MHENDTC)
+  ) %>%
+  dplyr::filter(!is.na(MHTERM) & MHCAT == "Medical History") %>%
+  dplyr::arrange(STUDYID, USUBJID) %>% 
+  tibble::as_tibble() 
+
+print(ADMH) 
+
+```
+Сохранение
+
+```{r}
+openxlsx::write.xlsx(ADMH, "C:/Users/enami/OneDrive/Рабочий стол/Управление данными/ADam-like/ADMH.xlsx")
+```
+
